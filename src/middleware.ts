@@ -777,8 +777,8 @@ function mergeGuardMeta(
 
 /**
  * Guard a CallToolResult-shaped object while preserving a valid MCP result
- * envelope. Standard non-text content blocks remain untouched; text and
- * structured evidence are compacted and budgeted deterministically.
+ * envelope. Authoritative structuredContent remains unchanged while text and
+ * structured evidence contribute to a separately compacted model projection.
  */
 export function guardCallToolResult<T extends object>(
   result: T,
@@ -840,12 +840,6 @@ export function guardCallToolResult<T extends object>(
     }
 
     source.content = originalContent;
-  }
-
-  if ("structuredContent" in source && "structuredContent" in guarded.bundle) {
-    source.structuredContent = guarded.forcedText === undefined
-      ? guarded.bundle.structuredContent
-      : { _guard_meta: guarded.meta };
   }
 
   if (guarded.meta !== undefined) {

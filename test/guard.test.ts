@@ -175,3 +175,148 @@ describe("MCP client interception", () => {
     });
   });
 });
+
+describe("canonical evidence separation", () => {
+  it("preserves authoritative structuredContent while deriving a compact projection", () => {
+    const structuredContent = {
+      empty: "",
+      nullable: null,
+      answer: 42,
+      nested: {
+        drop: null,
+        keep: "value",
+      },
+    };
+
+    const original: CallToolResult = {
+      content: [],
+      structuredContent,
+      isError: false,
+    };
+
+    const guarded = guardCallToolResult(original, {
+      maxBytes: 10_000,
+      maxTokens: 10_000,
+      format: "compact-json",
+      strategy: "adaptive",
+    });
+
+    expect(guarded).not.toBe(original);
+    expect(guarded.structuredContent).toBe(structuredContent);
+    expect(guarded.structuredContent).toEqual({
+      empty: "",
+      nullable: null,
+      answer: 42,
+      nested: {
+        drop: null,
+        keep: "value",
+      },
+    });
+
+    expect(firstText(guarded)).toBe(
+      '{"answer":42,"nested":{"keep":"value"}}',
+    );
+
+    expect(original.content).toEqual([]);
+    expect(original.structuredContent).toBe(structuredContent);
+  });
+
+  it("preserves authoritative structuredContent when the projection falls back to a tombstone", () => {
+    const structuredContent = {
+      records: Array.from({ length: 20 }, (_, index) => ({
+        id: index,
+        value: `record-${index}-${"x".repeat(80)}`,
+      })),
+    };
+
+    const original: CallToolResult = {
+      content: [
+        {
+          type: "text",
+          text: "Readable evidence",
+        },
+      ],
+      structuredContent,
+      isError: false,
+    };
+
+    const originalContent = JSON.parse(
+      JSON.stringify(original.content),
+    ) as CallToolResult["content"];
+
+    const guarded = guardCallToolResult(original, {
+      maxBytes: 120,
+      maxTokens: 10_000,
+      format: "compact-json",
+      strategy: "lossless-first",
+      onBudgetExceeded: "tombstone",
+    });
+
+    expect(utf8ByteLength(firstText(guarded))).toBeLessThanOrEqual(120);
+
+    expect(guarded.structuredContent).toBe(structuredContent);
+    expect(guarded.structuredContent).toEqual(structuredContent);
+
+    expect(guarded._meta).toBeDefined();
+
+    const meta = guarded._meta as Record<string, unknown>;
+    const guardMeta = meta.evidenceGuard as Record<string, unknown>;
+
+    expect(guardMeta.status).toBe("truncated_to_budget");
+
+    expect(original.content).toEqual(originalContent);
+    expect(original.structuredContent).toBe(structuredContent);
+  });
+
+  it("does not mutate caller metadata when guard metadata is added", () => {
+    const originalMeta = {
+      requestId: "request-123",
+      nested: {
+        keep: true,
+      },
+    };
+
+    const original: CallToolResult = {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            records: Array.from({ length: 20 }, (_, index) => ({
+              id: index,
+              value: `record-${index}-${"x".repeat(80)}`,
+            })),
+          }),
+        },
+      ],
+      isError: false,
+      _meta: originalMeta,
+    };
+
+    const guarded = guardCallToolResult(original, {
+      maxBytes: 120,
+      maxTokens: 10_000,
+      format: "compact-json",
+      strategy: "lossless-first",
+      onBudgetExceeded: "tombstone",
+    });
+
+    expect(guarded._meta).not.toBe(originalMeta);
+    expect(guarded._meta).toMatchObject({
+      requestId: "request-123",
+      nested: {
+        keep: true,
+      },
+      evidenceGuard: {
+        status: "truncated_to_budget",
+      },
+    });
+
+    expect(original._meta).toBe(originalMeta);
+    expect(original._meta).toEqual({
+      requestId: "request-123",
+      nested: {
+        keep: true,
+      },
+    });
+  });
+});

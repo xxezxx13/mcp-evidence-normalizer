@@ -68,7 +68,7 @@ const result = await client.callTool({
 });
 ```
 
-The returned value remains a CallToolResult-shaped object. Standard non-text content blocks are retained. Text evidence and `structuredContent` are canonicalized and budgeted. Existing top-level `isError` and `_meta` data are preserved; when degradation occurs, `_meta.evidenceGuard` contains the tombstone metadata.
+The returned value remains a CallToolResult-shaped object. Standard non-text content blocks are retained. The guard derives a canonicalized, budgeted model-facing projection from text evidence and `structuredContent`, while authoritative `structuredContent` itself remains unchanged. Existing top-level `isError` and `_meta` data are preserved; when degradation occurs, `_meta.evidenceGuard` contains the tombstone metadata.
 
 ## Guard options
 
