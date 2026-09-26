@@ -1,0 +1,60 @@
+{
+  "name": "mcp-evidence-normalizer",
+  "version": "0.2.0",
+  "description": "Drop-in MCP tool-result guard and deterministic evidence normalizer with lossless-first compaction and hard budgets.",
+  "author": "Kelvin Rivera",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "PROVENANCE.md",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run typecheck && npm run typecheck:examples && npm test && npm run build",
+    "typecheck:examples": "tsc --noEmit -p tsconfig.examples.json",
+    "verify": "npm run typecheck && npm run typecheck:examples && npm test && npm run build && npm run pack:check"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "evidence",
+    "normalization",
+    "middleware",
+    "proxy",
+    "guard",
+    "token-budget",
+    "context-window"
+  ],
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "26.4.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

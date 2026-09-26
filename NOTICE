@@ -1,0 +1,31 @@
+men (MCP Evidence Normalizer)
+Copyright 2026 Kelvin Rivera
+
+men was originally created by Kelvin Rivera.
+
+The project grew out of a series of personal AI systems developed by
+Kelvin Rivera.
+
+An early project, referred to retrospectively as Mach I, explored distributed
+llama.cpp inference across the SER5 and PHENOM computers. It was abandoned
+after real testing showed that PHENOM became a performance bottleneck rather
+than an accelerator.
+
+Kel AI, referred to retrospectively as Mach II, followed as a persistent
+dual-mode personal AI system using Groq for online inference and a local
+Qwen model for private/offline inference. Its UI, orchestration, retrieval,
+privacy system, and surrounding architecture were built largely from scratch.
+As a one-person project, its architecture and development commitment eventually
+grew far beyond the original goal, and it too was dismantled.
+
+Mach III was the architectural reset: a deliberately smaller local-first
+personal AI assistant built around reuse of existing open-source components,
+local WebLLM inference, persistent Markdown memory, web research, and a bounded
+MCP tool interface.
+
+men grew directly out of Mach III after a real MCP tool-result representation
+failure demonstrated the need for a small deterministic evidence-normalization
+layer between MCP tools and language models.
+
+See PROVENANCE.md for the complete technical history, project lineage, and
+extraction boundary.
