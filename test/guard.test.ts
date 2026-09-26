@@ -214,7 +214,7 @@ describe("canonical evidence separation", () => {
     });
 
     expect(firstText(guarded)).toBe(
-      '{"answer":42,"nested":{"keep":"value"}}',
+      '{"answer":42,"empty":"","nested":{"drop":null,"keep":"value"},"nullable":null}',
     );
 
     expect(original.content).toEqual([]);

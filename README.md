@@ -103,7 +103,7 @@ When neither budget is supplied, the guard defaults to `maxTokens: 3500`. Supply
 
 ## Lossless-first compaction
 
-`pruneEmptyValues()` removes `null`, `undefined`, empty strings, and empty arrays unless the field is pinned. `sortObjectKeys()` recursively canonicalizes object key order. `tabularize()` detects homogeneous arrays of objects and produces deterministic Markdown and TSV table representations while retaining every remaining cell value.
+`compactValue()` performs lossless canonicalization by recursively sorting object keys without discarding valid JSON values such as `null`, empty strings, or empty arrays. `pruneEmptyValues()` remains available as an explicit opt-in utility for removing empty object fields, but it preserves array positions. `sortObjectKeys()` recursively canonicalizes object key order. `tabularize()` detects homogeneous arrays of objects and produces deterministic Markdown and TSV table representations while retaining every cell value.
 
 JSON text blocks are parsed when possible, canonicalized, and then rendered according to `format`. Non-JSON text remains ordinary text.
 

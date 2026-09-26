@@ -29,10 +29,14 @@ function isEmptyValue(value: unknown): boolean {
 }
 
 /**
- * Remove null, undefined, empty strings, and empty arrays recursively.
+ * Remove empty object fields recursively without collapsing array positions.
+ *
+ * Object fields containing null, undefined, empty strings, or empty arrays are
+ * removed unless pinned. Array elements always retain their original positions,
+ * while objects nested inside arrays are still pruned recursively.
  *
  * `pinnedFields` accepts field names or dot paths that must survive pruning.
- * Array order is preserved. Object keys are not sorted by this function.
+ * Object keys are not sorted by this function.
  */
 export function pruneEmptyValues(
   value: unknown,
@@ -42,19 +46,9 @@ export function pruneEmptyValues(
 
   function visit(current: unknown, path: string): unknown {
     if (Array.isArray(current)) {
-      const result: unknown[] = [];
-
-      for (let index = 0; index < current.length; index += 1) {
-        const childPath = `${path}[${index}]`;
-        const original = current[index];
-        const next = visit(original, childPath);
-
-        if (!isEmptyValue(next)) {
-          result.push(next);
-        }
-      }
-
-      return result;
+      return current.map((item, index) =>
+        visit(item, `${path}[${index}]`),
+      );
     }
 
     if (!isRecord(current)) {
@@ -100,12 +94,18 @@ export function sortObjectKeys(value: unknown): unknown {
   return sorted;
 }
 
-/** Lossless-first canonicalization used before any budget-driven degradation. */
+/**
+ * Lossless canonicalization used before any budget-driven degradation.
+ *
+ * Valid JSON values are preserved exactly; canonicalization only normalizes
+ * deterministic object-key ordering. The legacy second parameter is retained
+ * for API compatibility but no longer controls implicit value removal.
+ */
 export function compactValue(
   value: unknown,
-  pinnedFields: readonly string[] = [],
+  _pinnedFields: readonly string[] = [],
 ): unknown {
-  return sortObjectKeys(pruneEmptyValues(value, pinnedFields));
+  return sortObjectKeys(value);
 }
 
 function stableJson(value: unknown): string {
