@@ -103,7 +103,7 @@ When neither budget is supplied, the guard defaults to `maxTokens: 3500`. Supply
 
 ## Lossless-first compaction
 
-`compactValue()` performs lossless canonicalization by recursively sorting object keys without discarding valid JSON values such as `null`, empty strings, or empty arrays. `pruneEmptyValues()` remains available as an explicit opt-in utility for removing empty object fields, but it preserves array positions. `sortObjectKeys()` recursively canonicalizes object key order. `tabularize()` detects homogeneous arrays of objects and produces deterministic Markdown and TSV table representations while retaining every cell value.
+`compactValue()` performs lossless canonicalization by recursively sorting object keys without discarding valid JSON values such as `null`, empty strings, or empty arrays. Hostile-looking keys such as `__proto__`, `constructor`, and `prototype` are retained as ordinary own evidence properties without altering reconstructed object prototypes. `pruneEmptyValues()` remains available as an explicit opt-in utility for removing empty object fields, but it preserves array positions. `sortObjectKeys()` recursively canonicalizes object key order. `tabularize()` detects homogeneous arrays of objects and produces deterministic Markdown and TSV table representations while retaining every cell value.
 
 JSON text blocks are parsed when possible, canonicalized, and then rendered according to `format`. Non-JSON text remains ordinary text.
 

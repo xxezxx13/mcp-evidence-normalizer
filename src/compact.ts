@@ -11,6 +11,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function defineOwnDataProperty(
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 function matchesField(
   path: string,
   key: string,
@@ -66,7 +79,7 @@ export function pruneEmptyValues(
         continue;
       }
 
-      result[key] = next;
+      defineOwnDataProperty(result, key, next);
     }
 
     return result;
@@ -88,7 +101,7 @@ export function sortObjectKeys(value: unknown): unknown {
   const sorted: Record<string, unknown> = {};
 
   for (const key of Object.keys(value).sort()) {
-    sorted[key] = sortObjectKeys(value[key]);
+    defineOwnDataProperty(sorted, key, sortObjectKeys(value[key]));
   }
 
   return sorted;
