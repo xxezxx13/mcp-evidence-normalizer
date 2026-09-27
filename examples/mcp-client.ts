@@ -48,7 +48,7 @@ async function main(): Promise<void> {
 
   const client = new Client({
     name: "men-example",
-    version: "0.1.0",
+    version: "1.0.0",
   });
 
   try {

@@ -1,6 +1,6 @@
 {
   "name": "mcp-evidence-normalizer",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Drop-in MCP tool-result guard and deterministic evidence normalizer with lossless-first compaction and hard budgets.",
   "author": "Kelvin Rivera",
   "type": "module",

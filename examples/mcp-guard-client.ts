@@ -32,7 +32,7 @@ async function main(): Promise<void> {
 
   const rawClient = new Client({
     name: "men-guard-example",
-    version: "0.2.0",
+    version: "1.0.0",
   });
 
   const client = withEvidenceGuard(rawClient, {

@@ -26,7 +26,7 @@ hard string clamping only as a last structured stage
 bounded MCP CallToolResult
 ```
 
-The original `normalizeMcpResult()` API remains available and keeps its v0.1 behavior, including full source blocks and deterministic `maxChars` rendering.
+The original `normalizeMcpResult()` API remains available and keeps its original behavior, including full source blocks and deterministic `maxChars` rendering.
 
 ## Drop-in MCP guard
 
@@ -262,13 +262,6 @@ See [`PROVENANCE.md`](./PROVENANCE.md) for the detailed technical lineage and ex
 
 ## Status
 
-v0.1.0 — initial public release.
+**v1** is the first release in the rebased project lineage and corresponds to npm package version **1.0.0**.
 
-The intentionally small public API is:
-
-```ts
-normalizeMcpResult(result, options?)
-renderEvidence(evidence)
-```
-
-I intend to keep the public surface small and earn additional complexity only when real integrations demonstrate that it is needed.
+The public surface intentionally remains focused on deterministic evidence normalization, rendering, budgeting, and optional MCP `callTool()` guarding. Future releases will use whole-number Git tags (`v2`, `v3`, and so on) with corresponding npm semantic versions (`2.0.0`, `3.0.0`, and so on).

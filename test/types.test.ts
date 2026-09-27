@@ -7,7 +7,7 @@ import type {
 } from "../src/index.js";
 
 describe("canonical evidence types", () => {
-  it("represent the intended v0.1 evidence contract", () => {
+  it("represent the intended original evidence contract", () => {
     const blocks: EvidenceBlock[] = [
       {
         type: "text",
