@@ -7,8 +7,48 @@ export interface TabularizedData {
   tsv: string;
 }
 
+const MAX_EVIDENCE_NESTING_DEPTH = 1_024;
+
+const CYCLIC_EVIDENCE_MESSAGE =
+  "Cyclic evidence structures are not supported";
+
+const EXCESSIVE_NESTING_MESSAGE =
+  `Evidence nesting depth exceeds ${MAX_EVIDENCE_NESTING_DEPTH} container levels`;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function enterContainer(
+  value: object,
+  activeAncestors: WeakSet<object>,
+  depth: number,
+): void {
+  /*
+   * Track only the current ancestry chain rather than every object ever seen.
+   * Shared references in an otherwise acyclic DAG therefore remain valid,
+   * while a true ancestor cycle is rejected deterministically.
+   */
+  if (activeAncestors.has(value)) {
+    throw new TypeError(
+      CYCLIC_EVIDENCE_MESSAGE,
+    );
+  }
+
+  if (depth >= MAX_EVIDENCE_NESTING_DEPTH) {
+    throw new RangeError(
+      EXCESSIVE_NESTING_MESSAGE,
+    );
+  }
+
+  activeAncestors.add(value);
+}
+
+function leaveContainer(
+  value: object,
+  activeAncestors: WeakSet<object>,
+): void {
+  activeAncestors.delete(value);
 }
 
 function defineOwnDataProperty(
@@ -56,55 +96,170 @@ export function pruneEmptyValues(
   pinnedFields: readonly string[] = [],
 ): unknown {
   const pinned = new Set(pinnedFields);
+  const activeAncestors = new WeakSet<object>();
 
-  function visit(current: unknown, path: string): unknown {
+  function visit(
+    current: unknown,
+    path: string,
+    depth: number,
+  ): unknown {
     if (Array.isArray(current)) {
-      return current.map((item, index) =>
-        visit(item, `${path}[${index}]`),
+      enterContainer(
+        current,
+        activeAncestors,
+        depth,
       );
+
+      try {
+        return current.map((item, index) =>
+          visit(
+            item,
+            `${path}[${index}]`,
+            depth + 1,
+          ),
+        );
+      } finally {
+        leaveContainer(
+          current,
+          activeAncestors,
+        );
+      }
     }
 
     if (!isRecord(current)) {
       return current;
     }
 
-    const result: Record<string, unknown> = {};
+    enterContainer(
+      current,
+      activeAncestors,
+      depth,
+    );
 
-    for (const key of Object.keys(current)) {
-      const childPath = path.length === 0 ? key : `${path}.${key}`;
-      const original = current[key];
-      const next = visit(original, childPath);
+    try {
+      const result: Record<string, unknown> = {};
 
-      if (isEmptyValue(next) && !matchesField(childPath, key, pinned)) {
-        continue;
+      for (const key of Object.keys(current)) {
+        const childPath =
+          path.length === 0
+            ? key
+            : `${path}.${key}`;
+
+        const original = current[key];
+
+        const next = visit(
+          original,
+          childPath,
+          depth + 1,
+        );
+
+        if (
+          isEmptyValue(next) &&
+          !matchesField(
+            childPath,
+            key,
+            pinned,
+          )
+        ) {
+          continue;
+        }
+
+        defineOwnDataProperty(
+          result,
+          key,
+          next,
+        );
       }
 
-      defineOwnDataProperty(result, key, next);
+      return result;
+    } finally {
+      leaveContainer(
+        current,
+        activeAncestors,
+      );
     }
-
-    return result;
   }
 
-  return visit(value, "");
+  return visit(
+    value,
+    "",
+    0,
+  );
 }
 
 /** Recursively sort object keys while preserving array order. */
 export function sortObjectKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sortObjectKeys(item));
+  const activeAncestors =
+    new WeakSet<object>();
+
+  function visit(
+    current: unknown,
+    depth: number,
+  ): unknown {
+    if (Array.isArray(current)) {
+      enterContainer(
+        current,
+        activeAncestors,
+        depth,
+      );
+
+      try {
+        return current.map(
+          (item) =>
+            visit(
+              item,
+              depth + 1,
+            ),
+        );
+      } finally {
+        leaveContainer(
+          current,
+          activeAncestors,
+        );
+      }
+    }
+
+    if (!isRecord(current)) {
+      return current;
+    }
+
+    enterContainer(
+      current,
+      activeAncestors,
+      depth,
+    );
+
+    try {
+      const sorted:
+        Record<string, unknown> = {};
+
+      for (
+        const key of
+        Object.keys(current).sort()
+      ) {
+        defineOwnDataProperty(
+          sorted,
+          key,
+          visit(
+            current[key],
+            depth + 1,
+          ),
+        );
+      }
+
+      return sorted;
+    } finally {
+      leaveContainer(
+        current,
+        activeAncestors,
+      );
+    }
   }
 
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  const sorted: Record<string, unknown> = {};
-
-  for (const key of Object.keys(value).sort()) {
-    defineOwnDataProperty(sorted, key, sortObjectKeys(value[key]));
-  }
-
-  return sorted;
+  return visit(
+    value,
+    0,
+  );
 }
 
 /**
