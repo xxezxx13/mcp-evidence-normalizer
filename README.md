@@ -13,7 +13,7 @@ MCP callTool()
    ↓
 lossless-first canonicalization
    ↓
-empty-value pruning + deterministic key ordering
+deterministic key ordering with JSON value preservation
    ↓
 array-of-object table pivoting
    ↓
@@ -99,7 +99,7 @@ interface GuardOptions {
 
 When neither budget is supplied, the guard defaults to `maxTokens: 3500`. Supplying only `maxBytes` selects a byte-only budget. When both `maxTokens` and `maxBytes` are supplied, both constraints must be satisfied. The built-in token estimator is dependency-free and uses a conservative `ceil(chars / 4)` heuristic. A tokenizer can be injected through `tokenEstimator` when exact model-specific counting is required.
 
-`p0` fields are pinned against priority pruning. `p2` fields are removed first when lossless compaction is insufficient. Common debug, trace, header, metadata, and timestamp keys are treated as low-priority by default unless overridden.
+Unclassified evidence defaults to `p1`; the guard does not infer low priority from field names. Only caller-explicit `p2` fields are eligible for priority pruning. `fieldPriorities` accepts field names or evidence-relative paths such as `metadata.debug_trace`. `p0` and `pinnedFields` protect matching evidence from structured degradation; a pinned parent protects its subtree, and a pinned descendant also protects the ancestors required to retain it.
 
 ## Lossless-first compaction
 
@@ -111,7 +111,7 @@ JSON text blocks are parsed when possible, canonicalized, and then rendered acco
 
 If the lossless-first representation still exceeds budget, adaptive degradation follows a deterministic sequence:
 
-1. Remove explicitly/default low-priority (`p2`) fields.
+1. Remove caller-explicit low-priority (`p2`) fields.
 2. Slice oversized arrays from the tail and replace them with `{ items, _guard_meta }` wrappers recording original and retained counts.
 3. Clamp long strings at Unicode code-point boundaries.
 4. If the result still cannot fit, apply `onBudgetExceeded`.

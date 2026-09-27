@@ -59,9 +59,6 @@ interface GuardPipelineResult {
   forcedText?: string;
 }
 
-const DEFAULT_P2_FIELD =
-  /^(?:debug(?:_|$)|trace(?:_|$)|raw_headers?$|headers?$|metadata$|timestamp$|timestamps$|request_headers?$|response_headers?$)/i;
-
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -166,12 +163,102 @@ function renderBundle(
   return parts.join("\n\n");
 }
 
+function publicEvidencePath(path: string): string {
+  if (path === "structuredContent") {
+    return "";
+  }
+
+  if (path.startsWith("structuredContent.")) {
+    return path.slice("structuredContent.".length);
+  }
+
+  const contentText = /^contentText\\[\\d+\\](?:\\.(.*))?$/.exec(path);
+  if (contentText !== null) {
+    return contentText[1] ?? "";
+  }
+
+  return path;
+}
+
+function isSameOrDescendant(path: string, base: string): boolean {
+  if (base.length === 0) {
+    return path.length === 0;
+  }
+
+  return (
+    path === base ||
+    path.startsWith(`${base}.`) ||
+    path.startsWith(`${base}[`)
+  );
+}
+
+function nameRuleMatchesPath(path: string, name: string): boolean {
+  return (
+    path === name ||
+    path.startsWith(`${name}.`) ||
+    path.startsWith(`${name}[`) ||
+    path.includes(`.${name}.`) ||
+    path.includes(`.${name}[`) ||
+    path.endsWith(`.${name}`)
+  );
+}
+
+function protectedRuleMatches(
+  rule: string,
+  path: string,
+  key: string,
+): boolean {
+  if (rule === key) {
+    return true;
+  }
+
+  const publicPath = publicEvidencePath(path);
+
+  if (!rule.includes(".") && !rule.includes("[")) {
+    return nameRuleMatchesPath(publicPath, rule);
+  }
+
+  return (
+    isSameOrDescendant(publicPath, rule) ||
+    isSameOrDescendant(rule, publicPath)
+  );
+}
+
+function isProtectedPath(
+  path: string,
+  key: string,
+  options: ResolvedGuardOptions,
+): boolean {
+  if (
+    options.pinnedFields.some((rule) =>
+      protectedRuleMatches(rule, path, key),
+    )
+  ) {
+    return true;
+  }
+
+  return Object.entries(options.fieldPriorities).some(
+    ([rule, priority]) =>
+      priority === "p0" &&
+      protectedRuleMatches(rule, path, key),
+  );
+}
+
 function fieldPriority(
   path: string,
   key: string,
   options: ResolvedGuardOptions,
 ): FieldPriority {
-  const exact = options.fieldPriorities[path];
+  if (isProtectedPath(path, key, options)) {
+    return "p0";
+  }
+
+  const publicPath = publicEvidencePath(path);
+
+  const exact =
+    options.fieldPriorities[path] ??
+    options.fieldPriorities[publicPath];
+
   if (exact !== undefined) {
     return exact;
   }
@@ -181,11 +268,7 @@ function fieldPriority(
     return byName;
   }
 
-  if (options.pinnedFields.includes(path) || options.pinnedFields.includes(key)) {
-    return "p0";
-  }
-
-  return DEFAULT_P2_FIELD.test(key) ? "p2" : "p1";
+  return "p1";
 }
 
 function collectFields(
@@ -311,7 +394,10 @@ function collectArrays(
   }
 }
 
-function nextArrayToSlice(bundle: EvidenceBundle): ValueRef | undefined {
+function nextArrayToSlice(
+  bundle: EvidenceBundle,
+  options: ResolvedGuardOptions,
+): ValueRef | undefined {
   const refs: ValueRef[] = [];
 
   for (let index = 0; index < bundle.contentText.length; index += 1) {
@@ -335,7 +421,16 @@ function nextArrayToSlice(bundle: EvidenceBundle): ValueRef | undefined {
   }
 
   return refs
-    .filter((ref) => Array.isArray(ref.value) && ref.value.length > 0)
+    .filter(
+      (ref) =>
+        Array.isArray(ref.value) &&
+        ref.value.length > 0 &&
+        !isProtectedPath(
+          ref.path,
+          typeof ref.key === "string" ? ref.key : String(ref.key),
+          options,
+        ),
+    )
     .sort((left, right) => {
       const byLength =
         (right.value as unknown[]).length - (left.value as unknown[]).length;
@@ -685,7 +780,7 @@ function runGuardPipeline(
 
   // Array slicing keeps leading rows/items and inserts an explicit local tombstone.
   for (let iteration = 0; iteration < 10_000; iteration += 1) {
-    const ref = nextArrayToSlice(bundle);
+    const ref = nextArrayToSlice(bundle, options);
     if (ref === undefined) {
       break;
     }
