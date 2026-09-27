@@ -607,6 +607,25 @@ function clampStringRef(ref: ValueRef, state: DegradationState): void {
   }
 }
 
+function publicDegradationPath(path: string): string {
+  const publicPath = publicEvidencePath(path);
+  return publicPath.length === 0 ? "$" : publicPath;
+}
+
+function withFinalMeasurement(
+  meta: TombstoneMeta,
+  text: string,
+  options: ResolvedGuardOptions,
+): TombstoneMeta {
+  const measurement = measureGuardText(text, options);
+
+  return {
+    ...meta,
+    retained_bytes: measurement.bytes,
+    estimated_tokens: measurement.estimatedTokens,
+  };
+}
+
 function buildMeta(
   state: DegradationState,
   originalBytes: number,
@@ -614,8 +633,16 @@ function buildMeta(
   options: ResolvedGuardOptions,
 ): TombstoneMeta {
   const measurement = measureGuardText(projection, options);
-  const omittedFields = [...new Set(state.omittedFields)].sort();
-  const hardClampedFields = [...new Set(state.hardClampedFields)].sort();
+  const omittedFields = [
+    ...new Set(
+      state.omittedFields.map(publicDegradationPath),
+    ),
+  ].sort();
+  const hardClampedFields = [
+    ...new Set(
+      state.hardClampedFields.map(publicDegradationPath),
+    ),
+  ].sort();
   const metadataListLimit = 32;
 
   return {
@@ -646,39 +673,87 @@ function buildMeta(
   };
 }
 
+interface FittedTombstone {
+  text: string;
+  meta: TombstoneMeta;
+}
+
 function fitTombstone(
   meta: TombstoneMeta,
   options: ResolvedGuardOptions,
-): string {
-  const candidates: unknown[] = [
-    { _guard_meta: meta },
-    {
+): FittedTombstone {
+  const candidateBuilders: Array<
+    (candidateMeta: TombstoneMeta) => unknown
+  > = [
+    (candidateMeta) => ({ _guard_meta: candidateMeta }),
+    (candidateMeta) => ({
       _guard_meta: {
-        status: meta.status,
-        ...(meta.original_count === undefined
+        status: candidateMeta.status,
+        ...(candidateMeta.original_count === undefined
           ? {}
-          : { original_count: meta.original_count }),
-        ...(meta.retained_count === undefined
+          : { original_count: candidateMeta.original_count }),
+        ...(candidateMeta.retained_count === undefined
           ? {}
-          : { retained_count: meta.retained_count }),
-        ...(meta.omitted_items === undefined
+          : { retained_count: candidateMeta.retained_count }),
+        ...(candidateMeta.omitted_items === undefined
           ? {}
-          : { omitted_items: meta.omitted_items }),
-        suggested_action: meta.suggested_action,
+          : { omitted_items: candidateMeta.omitted_items }),
+        suggested_action: candidateMeta.suggested_action,
       },
-    },
-    { _guard_meta: { status: meta.status } },
-    {},
+    }),
+    (candidateMeta) => ({
+      _guard_meta: {
+        status: candidateMeta.status,
+      },
+    }),
+    () => ({}),
   ];
 
-  for (const candidate of candidates) {
-    const rendered = renderCompactJson(candidate);
-    if (fitsGuardBudget(rendered, options)) {
-      return rendered;
+  for (const buildCandidate of candidateBuilders) {
+    let candidateMeta = meta;
+    const seenMeasurements = new Set<string>();
+
+    for (let iteration = 0; iteration < 16; iteration += 1) {
+      const rendered = renderCompactJson(
+        buildCandidate(candidateMeta),
+      );
+
+      if (!fitsGuardBudget(rendered, options)) {
+        break;
+      }
+
+      const finalMeta = withFinalMeasurement(
+        meta,
+        rendered,
+        options,
+      );
+
+      const measurementKey =
+        `${finalMeta.retained_bytes}:${finalMeta.estimated_tokens}`;
+
+      if (
+        candidateMeta.retained_bytes === finalMeta.retained_bytes &&
+        candidateMeta.estimated_tokens === finalMeta.estimated_tokens
+      ) {
+        return {
+          text: rendered,
+          meta: finalMeta,
+        };
+      }
+
+      if (seenMeasurements.has(measurementKey)) {
+        break;
+      }
+
+      seenMeasurements.add(measurementKey);
+      candidateMeta = finalMeta;
     }
   }
 
-  return "";
+  return {
+    text: "",
+    meta: withFinalMeasurement(meta, "", options),
+  };
 }
 
 function initialBundle(
@@ -834,19 +909,30 @@ function finishExceeded(
   }
 
   if (options.onBudgetExceeded === "truncate-bytes" && options.format !== "compact-json") {
+    const forcedText = clampTextToGuardBudget(
+      projection,
+      options,
+    );
+
     return {
       bundle,
       projection,
-      meta,
-      forcedText: clampTextToGuardBudget(projection, options),
+      meta: withFinalMeasurement(
+        meta,
+        forcedText,
+        options,
+      ),
+      forcedText,
     };
   }
+
+  const fitted = fitTombstone(meta, options);
 
   return {
     bundle,
     projection,
-    meta,
-    forcedText: fitTombstone(meta, options),
+    meta: fitted.meta,
+    forcedText: fitted.text,
   };
 }
 

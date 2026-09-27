@@ -116,7 +116,7 @@ If the lossless-first representation still exceeds budget, adaptive degradation 
 3. Clamp long strings at Unicode code-point boundaries.
 4. If the result still cannot fit, apply `onBudgetExceeded`.
 
-A tombstone includes the available original/retained counts, omitted field paths, omitted item count, original/retained byte measurements, estimated tokens, clamped field paths, and a suggested narrowing action. Field-path lists are capped with separate total-count fields so bookkeeping cannot become a second blowout. Metadata is reduced deterministically if the tombstone itself must fit an unusually small budget.
+A tombstone includes the available original/retained counts, omitted field paths, omitted item count, original/retained byte measurements, estimated tokens, clamped field paths, and a suggested narrowing action. Degradation field paths are evidence-relative (for example, `metadata.debug_trace`); internal bundle roots such as `structuredContent` and `contentText[0]` are not exposed. `retained_bytes` and `estimated_tokens` describe the final model-facing text, including tombstone and hard-truncation fallbacks. Field-path lists are capped with separate total-count fields so bookkeeping cannot become a second blowout. Metadata is reduced deterministically if the tombstone itself must fit an unusually small budget.
 
 `compact-json` never falls back to malformed sliced JSON. Under an impossible sub-JSON budget, the model-facing text becomes empty rather than emitting a broken JSON fragment; tombstone information remains available in `_meta.evidenceGuard` when the MCP envelope can carry it.
 

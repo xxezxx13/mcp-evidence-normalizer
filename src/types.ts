@@ -113,12 +113,16 @@ export interface TombstoneMeta {
   status: "truncated_to_budget";
   original_count?: number;
   retained_count?: number;
+  /** Evidence-relative paths omitted during priority degradation. */
   omitted_fields?: string[];
   omitted_field_count?: number;
   omitted_items?: number;
   original_bytes?: number;
+  /** UTF-8 byte size of the final model-facing text. */
   retained_bytes?: number;
+  /** Token estimate for the final model-facing text. */
   estimated_tokens?: number;
+  /** Evidence-relative paths clamped during structured degradation. */
   hard_clamped_fields?: string[];
   hard_clamped_field_count?: number;
   suggested_action?: string;
@@ -137,12 +141,17 @@ export interface GuardOptions {
   onBudgetExceeded?: BudgetExceededPolicy;
 
   /**
-   * Field-name or dot-path priorities. A final key match is used when no exact
-   * path match exists, so `{ debug_trace: "p2" }` applies at any depth.
+   * Field-name or evidence-relative path priorities. A final key match is used
+   * when no exact path match exists, so `{ debug_trace: "p2" }` applies at any
+   * depth.
    */
   fieldPriorities?: Readonly<Record<string, FieldPriority>>;
 
-  /** Empty values at these field names or dot paths survive empty-value pruning. */
+  /**
+   * Field names or evidence-relative paths protected from structured
+   * degradation. Parent pins protect their subtree; descendant pins also
+   * protect the ancestors required to retain the descendant.
+   */
   pinnedFields?: readonly string[];
 
   /** Optional exact tokenizer or alternate estimator. */

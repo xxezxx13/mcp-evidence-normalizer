@@ -109,7 +109,7 @@ describe("conservative priority semantics", () => {
 
     expect(projection).not.toContain('"metadata"');
     expect(meta.omitted_fields).toEqual(
-      expect.arrayContaining(["structuredContent.metadata"]),
+      expect.arrayContaining(["metadata"]),
     );
   });
 
@@ -144,7 +144,7 @@ describe("conservative priority semantics", () => {
     expect(projection).not.toContain("dddddddddd");
     expect(meta.omitted_fields).toEqual(
       expect.arrayContaining([
-        "structuredContent.metadata.debug_trace",
+        "metadata.debug_trace",
       ]),
     );
   });
@@ -184,10 +184,10 @@ describe("conservative priority semantics", () => {
     expect(projection).toContain('"metadata"');
     expect(projection).toContain('"legalBasis":"retain-me"');
     expect(meta.omitted_fields).not.toEqual(
-      expect.arrayContaining(["structuredContent.metadata"]),
+      expect.arrayContaining(["metadata"]),
     );
     expect(meta.omitted_fields).toEqual(
-      expect.arrayContaining(["structuredContent.timestamp"]),
+      expect.arrayContaining(["timestamp"]),
     );
   });
 
