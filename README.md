@@ -78,9 +78,7 @@ interface GuardOptions {
   maxBytes?: number;
   strategy?:
     | "adaptive"
-    | "lossless-first"
-    | "hard-cap"
-    | "lossy-degrade";
+    | "lossless-first";
   format?:
     | "compact-markdown"
     | "compact-json"
@@ -98,6 +96,8 @@ interface GuardOptions {
 ```
 
 When neither budget is supplied, the guard defaults to `maxTokens: 3500`. Supplying only `maxBytes` selects a byte-only budget. When both `maxTokens` and `maxBytes` are supplied, both constraints must be satisfied. The built-in token estimator is dependency-free and uses a conservative `ceil(chars / 4)` heuristic. A tokenizer can be injected through `tokenEstimator` when exact model-specific counting is required.
+
+`strategy` has two v1 behaviors. `adaptive` keeps the lossless representation when it fits, then applies structured degradation before the configured budget-exceeded fallback. `lossless-first` never performs structured degradation; if the lossless representation exceeds budget, it immediately applies `onBudgetExceeded`.
 
 Unclassified evidence defaults to `p1`; the guard does not infer low priority from field names. Only caller-explicit `p2` fields are eligible for priority pruning. `fieldPriorities` accepts field names or evidence-relative paths such as `metadata.debug_trace`. `p0` and `pinnedFields` protect matching evidence from structured degradation; a pinned parent protects its subtree, and a pinned descendant also protects the ancestors required to retain it.
 

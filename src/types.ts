@@ -85,9 +85,7 @@ export interface NormalizeOptions {
 /** Strategies available to the MCP middleware guard. */
 export type CompactionStrategy =
   | "adaptive"
-  | "lossless-first"
-  | "hard-cap"
-  | "lossy-degrade";
+  | "lossless-first";
 
 /** Model-facing output encoding used after compaction. */
 export type GuardFormat =

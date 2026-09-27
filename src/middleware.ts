@@ -304,13 +304,17 @@ function collectFields(
   }
 }
 
-function nextDroppableField(
+function collectDroppableFields(
   bundle: EvidenceBundle,
   options: ResolvedGuardOptions,
-): FieldRef | undefined {
+): FieldRef[] {
   const refs: FieldRef[] = [];
 
-  for (let index = 0; index < bundle.contentText.length; index += 1) {
+  for (
+    let index = 0;
+    index < bundle.contentText.length;
+    index += 1
+  ) {
     collectFields(
       bundle.contentText[index],
       `contentText[${index}]`,
@@ -328,21 +332,17 @@ function nextDroppableField(
     );
   }
 
-  const priorityRank: Record<FieldPriority, number> = {
-    p2: 0,
-    p1: 1,
-    p0: 2,
-  };
-
   return refs
     .filter((ref) => ref.priority === "p2")
     .sort((left, right) => {
-      const byPriority = priorityRank[left.priority] - priorityRank[right.priority];
-      if (byPriority !== 0) {
-        return byPriority;
-      }
+      /*
+       * Descendants must precede ancestors. That preserves the
+       * existing deletion semantics while allowing this ordered
+       * candidate set to be collected only once.
+       */
+      const byDepth =
+        right.path.length - left.path.length;
 
-      const byDepth = right.path.length - left.path.length;
       return byDepth !== 0
         ? byDepth
         : left.path < right.path
@@ -350,7 +350,69 @@ function nextDroppableField(
           : left.path > right.path
             ? 1
             : 0;
-    })[0];
+    });
+}
+
+interface DeletedFieldSnapshot {
+  ref: FieldRef;
+  descriptor: PropertyDescriptor;
+}
+
+const PRIORITY_PRUNE_BATCH_SIZE = 32;
+
+function deleteDroppableField(
+  ref: FieldRef,
+  state: DegradationState,
+): DeletedFieldSnapshot | undefined {
+  const descriptor =
+    Object.getOwnPropertyDescriptor(
+      ref.parent,
+      ref.key,
+    );
+
+  if (descriptor === undefined) {
+    return undefined;
+  }
+
+  if (!delete ref.parent[ref.key]) {
+    return undefined;
+  }
+
+  state.omittedFields.push(ref.path);
+
+  return {
+    ref,
+    descriptor,
+  };
+}
+
+function restoreDroppableBatch(
+  snapshots: readonly DeletedFieldSnapshot[],
+  state: DegradationState,
+): void {
+  /*
+   * Restore in reverse deletion order. Descendants are pruned before
+   * ancestors, so reversing restoration recreates ancestors before
+   * restoring any properties they contain.
+   */
+  for (
+    let index = snapshots.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    const snapshot = snapshots[index]!;
+
+    Object.defineProperty(
+      snapshot.ref.parent,
+      snapshot.ref.key,
+      snapshot.descriptor,
+    );
+  }
+
+  state.omittedFields.splice(
+    state.omittedFields.length - snapshots.length,
+    snapshots.length,
+  );
 }
 
 function collectArrays(
@@ -833,23 +895,85 @@ function runGuardPipeline(
     slicedArrayCount: 0,
   };
 
-  // Priority pruning: remove low-priority p2 fields. p0/p1 fields are retained.
-  for (let iteration = 0; iteration < 10_000; iteration += 1) {
-    const ref = nextDroppableField(bundle, options);
-    if (ref === undefined) {
-      break;
+  /*
+   * Priority pruning keeps the existing deterministic deletion order
+   * and exact stop-at-first-fit semantics without rendering after
+   * every deletion.
+   *
+   * Delete a small candidate batch, render once, and continue when it
+   * still does not fit. When a batch crosses the budget boundary,
+   * restore only that batch and replay it one field at a time to find
+   * the same minimal deletion prefix as the sequential algorithm.
+   */
+  const droppableFields =
+    collectDroppableFields(bundle, options);
+
+  for (
+    let startIndex = 0;
+    startIndex < droppableFields.length;
+    startIndex += PRIORITY_PRUNE_BATCH_SIZE
+  ) {
+    const batch = droppableFields.slice(
+      startIndex,
+      startIndex + PRIORITY_PRUNE_BATCH_SIZE,
+    );
+
+    const deletedBatch: DeletedFieldSnapshot[] = [];
+
+    for (const ref of batch) {
+      const snapshot =
+        deleteDroppableField(ref, state);
+
+      if (snapshot !== undefined) {
+        deletedBatch.push(snapshot);
+      }
     }
 
-    delete ref.parent[ref.key];
-    state.omittedFields.push(ref.path);
+    if (deletedBatch.length === 0) {
+      continue;
+    }
+
     projection = renderBundle(bundle, options);
 
-    if (fitsGuardBudget(projection, options)) {
-      return {
-        bundle,
-        projection,
-        meta: buildMeta(state, originalBytes, projection, options),
-      };
+    if (!fitsGuardBudget(projection, options)) {
+      continue;
+    }
+
+    /*
+     * This batch crossed the fit boundary. Reverse it and refine only
+     * within the batch so no more evidence is removed than before.
+     */
+    restoreDroppableBatch(
+      deletedBatch,
+      state,
+    );
+
+    for (const snapshot of deletedBatch) {
+      const replayed =
+        deleteDroppableField(
+          snapshot.ref,
+          state,
+        );
+
+      if (replayed === undefined) {
+        continue;
+      }
+
+      projection =
+        renderBundle(bundle, options);
+
+      if (fitsGuardBudget(projection, options)) {
+        return {
+          bundle,
+          projection,
+          meta: buildMeta(
+            state,
+            originalBytes,
+            projection,
+            options,
+          ),
+        };
+      }
     }
   }
 

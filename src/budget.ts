@@ -69,6 +69,25 @@ export const DEFAULT_GUARD_OPTIONS = Object.freeze({
   suggestedAction: "Narrow query filters using limit/offset",
 }) satisfies Readonly<GuardOptions>;
 
+function resolveStrategy(
+  value: unknown,
+): ResolvedGuardOptions["strategy"] {
+  if (value === undefined) {
+    return DEFAULT_GUARD_OPTIONS.strategy;
+  }
+
+  if (
+    value === "adaptive" ||
+    value === "lossless-first"
+  ) {
+    return value;
+  }
+
+  throw new RangeError(
+    "GuardOptions.strategy must be adaptive or lossless-first",
+  );
+}
+
 function validateBudget(name: string, value: number | undefined): void {
   if (value === undefined) {
     return;
@@ -94,7 +113,7 @@ export function resolveGuardOptions(
   return {
     ...(maxTokens === undefined ? {} : { maxTokens }),
     ...(maxBytes === undefined ? {} : { maxBytes }),
-    strategy: options.strategy ?? DEFAULT_GUARD_OPTIONS.strategy,
+    strategy: resolveStrategy(options.strategy),
     format: options.format ?? DEFAULT_GUARD_OPTIONS.format,
     onBudgetExceeded:
       options.onBudgetExceeded ?? DEFAULT_GUARD_OPTIONS.onBudgetExceeded,
