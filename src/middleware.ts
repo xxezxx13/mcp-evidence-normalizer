@@ -1156,8 +1156,8 @@ export function guardCallToolResult<T extends object>(
 
 /**
  * Wrap an MCP client without modifying the upstream server or the client's
- * public TypeScript surface. The returned Proxy keeps the exact static type of
- * the supplied client and only intercepts callTool().
+ * public TypeScript surface. The returned Proxy intercepts callTool() while
+ * forwarding other members with underlying-client receiver semantics.
  */
 export function withEvidenceGuard<
   TClient extends { callTool: (...args: never[]) => unknown },
@@ -1165,30 +1165,140 @@ export function withEvidenceGuard<
   client: TClient,
   options: GuardOptions = {},
 ): TClient {
-  const callable = Reflect.get(client, "callTool");
+  const callable = Reflect.get(
+    client,
+    "callTool",
+    client,
+  );
 
   if (typeof callable !== "function") {
     throw new TypeError("withEvidenceGuard() requires a client with callTool()");
   }
 
-  const guardedCallTool = async (...args: unknown[]): Promise<unknown> => {
-    const result = await Reflect.apply(callable, client, args) as unknown;
+  const ownCallToolDescriptor =
+    Reflect.getOwnPropertyDescriptor(
+      client,
+      "callTool",
+    );
 
-    if (!isRecord(result)) {
-      throw new TypeError("MCP client callTool() returned a non-object result");
+  if (
+    ownCallToolDescriptor !== undefined &&
+    "value" in ownCallToolDescriptor &&
+    ownCallToolDescriptor.configurable === false &&
+    ownCallToolDescriptor.writable === false
+  ) {
+    throw new TypeError(
+      "withEvidenceGuard() cannot intercept a non-configurable, non-writable own callTool property",
+    );
+  }
+
+  const boundFunctions =
+    new WeakMap<Function, Function>();
+
+  const bindToClient = (
+    value: Function,
+  ): Function => {
+    const existing =
+      boundFunctions.get(value);
+
+    if (existing !== undefined) {
+      return existing;
     }
 
-    return guardCallToolResult(result, options);
+    const bound = value.bind(client);
+    boundFunctions.set(value, bound);
+    return bound;
   };
 
+  const guardedCallTool =
+    async (...args: unknown[]): Promise<unknown> => {
+      const result =
+        await Reflect.apply(
+          callable,
+          client,
+          args,
+        ) as unknown;
+
+      if (!isRecord(result)) {
+        throw new TypeError(
+          "MCP client callTool() returned a non-object result",
+        );
+      }
+
+      return guardCallToolResult(
+        result,
+        options,
+      );
+    };
+
   return new Proxy(client, {
-    get(target, property, receiver) {
+    get(target, property) {
+      /*
+       * Proxy invariants require an exact value for an own data property
+       * that is both non-configurable and non-writable. Such ordinary
+       * members therefore cannot be replaced with a bound function view.
+       */
+      const ownDescriptor =
+        Reflect.getOwnPropertyDescriptor(
+          target,
+          property,
+        );
+
+      if (
+        ownDescriptor !== undefined &&
+        "value" in ownDescriptor &&
+        ownDescriptor.configurable === false &&
+        ownDescriptor.writable === false
+      ) {
+        if (property === "callTool") {
+          throw new TypeError(
+            "withEvidenceGuard() cannot intercept a non-configurable, non-writable own callTool property",
+          );
+        }
+
+        return ownDescriptor.value;
+      }
+
+      if (
+        ownDescriptor !== undefined &&
+        !("value" in ownDescriptor) &&
+        ownDescriptor.configurable === false &&
+        ownDescriptor.get === undefined
+      ) {
+        return undefined;
+      }
+
       if (property === "callTool") {
         return guardedCallTool;
       }
 
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
+      /*
+       * Use the underlying client as the receiver so prototype accessors
+       * backed by JavaScript private fields retain their class brand.
+       */
+      const value =
+        Reflect.get(
+          target,
+          property,
+          target,
+        );
+
+      return typeof value === "function"
+        ? bindToClient(value)
+        : value;
+    },
+
+    set(target, property, value) {
+      /*
+       * Private-field setters have the same receiver requirement as
+       * getters, so assignments must also execute against the client.
+       */
+      return Reflect.set(
+        target,
+        property,
+        value,
+        target,
+      );
     },
   });
 }

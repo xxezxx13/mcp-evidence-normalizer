@@ -30,7 +30,7 @@ The original `normalizeMcpResult()` API remains available and keeps its v0.1 beh
 
 ## Drop-in MCP guard
 
-The current MCP TypeScript v2 client is `@modelcontextprotocol/client`. `withEvidenceGuard()` does not import an MCP SDK at runtime; it structurally wraps any client object exposing `callTool()`, so upstream servers do not need to change.
+The current MCP TypeScript v2 client is `@modelcontextprotocol/client`. `withEvidenceGuard()` does not import an MCP SDK at runtime; it structurally wraps any client object exposing `callTool()`, so upstream servers do not need to change. The wrapper preserves underlying-client receiver semantics for ordinary methods and accessors, including class members backed by JavaScript private fields, and exposes stable bound function references across repeated property access. JavaScript Proxy invariants require non-configurable, non-writable own data properties to be exposed unchanged; ordinary function-valued properties in that form are therefore returned unchanged. A `callTool` property in that form cannot be intercepted safely and is rejected explicitly by `withEvidenceGuard()`.
 
 ```ts
 import {
