@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Project releases use whole-number Git tags (`v1`, `v2`, `v3`, ...). The npm package uses the corresponding semantic major version (`1.0.0`, `2.0.0`, `3.0.0`, ...).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-09-28
 
 ### Added
 
